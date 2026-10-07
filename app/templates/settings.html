@@ -7,7 +7,7 @@
     <p class="lead">Keys are stored in {{ storage }} on this computer and only sent to the service they belong to.</p>
   </div>
 </div>
-{% if saved %}<div class="alert alert-success" role="status">{{ {'keys': 'Keys saved.', 'options': 'Settings saved.', 'linkedin': 'LinkedIn disconnected and its session deleted.'}.get(saved, 'Saved.') }}</div>{% endif %}
+{% if saved %}<div class="alert alert-success" role="status">{{ {'keys': 'Keys saved.', 'removed': 'Key removed.', 'options': 'Settings saved.', 'linkedin': 'LinkedIn disconnected and its session deleted.'}.get(saved, 'Saved.') }}</div>{% endif %}
 
 <div class="grid grid-2" style="align-items:start">
   <div class="stack">

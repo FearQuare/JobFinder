@@ -271,7 +271,7 @@ def save_keys(anthropic_api_key: str = Form(""), openai_api_key: str = Form(""),
               adzuna_app_key: str = Form(""), clear: str = Form("")):
     if clear in secrets_store.KNOWN_KEYS:
         secrets_store.delete_secret(clear)
-        return RedirectResponse("/settings?saved=keys", status_code=303)
+        return RedirectResponse("/settings?saved=removed", status_code=303)
     for name, value in (("anthropic_api_key", anthropic_api_key), ("openai_api_key", openai_api_key),
                         ("adzuna_app_id", adzuna_app_id), ("adzuna_app_key", adzuna_app_key)):
         if value.strip():

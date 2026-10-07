@@ -40,7 +40,9 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    # Not "no-referrer": with that policy browsers send `Origin: null` on the app's own POSTs, which the
+    # same-origin check below would refuse. "same-origin" still sends nothing to other sites.
+    "Referrer-Policy": "same-origin",
     "Cross-Origin-Opener-Policy": "same-origin",
 }
 
@@ -58,8 +60,12 @@ def host_allowed(host_header: str) -> bool:
 
 def same_origin_write(request: Request) -> bool:
     """True if a state-changing request comes from this app's own pages (or from a non-browser client)."""
-    if request.headers.get("sec-fetch-site", "") in ("cross-site", "same-site"):
+    # Modern browsers say where a request comes from; this can't be set by page scripts.
+    fetch_site = request.headers.get("sec-fetch-site", "")
+    if fetch_site in ("cross-site", "same-site"):
         return False
+    if fetch_site == "same-origin":
+        return True
     origin = request.headers.get("origin")
     if origin is None:
         return True  # curl, tests and very old browsers send no Origin

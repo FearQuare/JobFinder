@@ -43,6 +43,12 @@ def test_cross_site_writes_are_refused(tmp_data):
         assert r.status_code == 403
         with db.session() as conn:
             assert conn.execute("SELECT COUNT(*) FROM searches WHERE name='Evil'").fetchone()[0] == 0
+        # A real browser form post from the app's own page, as sent before the Referrer-Policy fix
+        # (Origin: null) — Sec-Fetch-Site still marks it as same-origin.
+        r = client.post("/searches", data={"name": "Mine0", "keywords": "SRE"},
+                        headers={"origin": "null", "sec-fetch-site": "same-origin"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert client.get("/").headers["referrer-policy"] == "same-origin"
         # The app's own pages (same origin) still work.
         r = client.post("/searches", data={"name": "Mine", "keywords": "SRE"},
                         headers={"origin": "http://127.0.0.1:8765", "sec-fetch-site": "same-origin"}, follow_redirects=False)
