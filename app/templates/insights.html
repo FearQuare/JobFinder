@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Skill insights · JobFinder{% endblock %}
+{% block content %}
+{% set err = request.query_params.get('error') %}
+{% if err == 'no_key' %}<div class="alert alert-warn" role="alert">Add your {{ ai_provider }} API key in <a href="/settings">Settings</a> to write summaries.</div>
+{% elif err %}<div class="alert alert-error" role="alert">{{ err }}</div>{% endif %}
+
+{% if group %}<a class="back-link" href="/insights">All roles</a>{% endif %}
+<div class="page-head">
+  <div>
+    <h1>{% if group %}{{ title }}{% else %}What employers ask for{% endif %}</h1>
+    <p class="lead">From the AI analysis of open postings. {{ counts.analysed }} of {{ counts.total }} jobs are analysed{% if counts.pending %}, {{ counts.pending }} are waiting{% endif %}.</p>
+  </div>
+  <form class="filters" style="margin:0" method="get" action="/insights" data-autosubmit aria-label="Choose a group">
+    <select name="category" aria-label="Role type" class="{{ 'is-set' if sel.category }}">
+      <option value="">All role types</option>
+      {% for k, v in CATEGORIES.items() if k != 'other' %}<option value="{{ k }}" {{ 'selected' if sel.category == k }}>{{ v }}</option>{% endfor %}
+    </select>
+    <select name="seniority" aria-label="Level" class="{{ 'is-set' if sel.seniority }}">
+      <option value="">Any level</option>
+      {% for k, v in SENIORITIES.items() %}<option value="{{ k }}" {{ 'selected' if sel.seniority == k }}>{{ v }}</option>{% endfor %}
+    </select>
+    <select name="job_type" aria-label="Contract" class="{{ 'is-set' if sel.job_type }}">
+      <option value="">Any contract</option>
+      {% for k, v in JOB_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if sel.job_type == k }}>{{ v }}</option>{% endfor %}
+    </select>
+    <noscript><button type="submit">Show</button></noscript>
+  </form>
+</div>
+
+{% if counts.pending and has_ai_key %}
+<div class="alert alert-info">{{ counts.pending }} open job{{ 's' if counts.pending != 1 }} haven't been analysed yet. <button type="button" class="btn-small btn-secondary" data-run="analyze">Analyse now</button></div>
+{% elif not has_ai_key %}
+<div class="alert alert-warn">Skill reports need AI analysis. Add your {{ ai_provider }} API key in <a href="/settings">Settings</a> (or switch provider there), then collect jobs or choose “Analyse now”.</div>
+{% endif %}
+{% include "_run_panel.html" %}
+
+{% if group %}
+  {% set link_params = {'category': sel.category, 'seniority': sel.seniority, 'job_type': sel.job_type} %}
+  {% if group.job_count == 0 %}
+    <div class="card card-soft empty"><h2>Nothing analysed in this group yet</h2><p>Collect more jobs or pick a broader group.</p></div>
+  {% else %}
+  <div class="split">
+    <section class="card">
+      <div class="section-head">
+        <h2>Skills in {{ group.job_count }} posting{{ 's' if group.job_count != 1 }}</h2>
+        <a class="small" href="/?{{ link_params | urlencode }}">View these jobs</a>
+      </div>
+      {% set skills = group.skills %}
+      {% include "_skill_bars.html" %}
+    </section>
+    <div class="stack">
+      <section class="card">
+        <h2>Summary</h2>
+        {% if summary %}
+          <div class="summary-md">{{ summary.content | markdown | safe }}</div>
+          <p class="meta-note">Written from {{ summary.job_count }} postings on {{ summary.created_at[:10] }}{% if summary.job_count != group.job_count %}. The data has changed since.{% endif %}</p>
+        {% else %}
+          <p class="muted">Get a short written report: the must-haves, the nice-to-haves and what to learn first.</p>
+        {% endif %}
+        <form method="post" action="/insights/summary" data-busy="Writing…">
+          <input type="hidden" name="category" value="{{ sel.category }}">
+          <input type="hidden" name="seniority" value="{{ sel.seniority }}">
+          <input type="hidden" name="job_type" value="{{ sel.job_type }}">
+          <button type="submit" class="{{ 'btn-secondary' if summary else 'btn-primary' }}" {{ 'disabled' if not has_ai_key }}>{{ 'Rewrite summary' if summary else 'Write summary' }}</button>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Languages</h2>
+        {% for l in group.languages %}
+          <div class="lang-row">
+            <div class="head"><strong>{{ l.language }}</strong><span class="muted">in {{ l.pct }}% of postings</span></div>
+            <div class="chips">{% for lvl, n in l.levels.items() %}<span class="chip">{{ lvl }}<span class="pct">{{ n }}</span></span>{% endfor %}</div>
+          </div>
+        {% else %}<p class="muted">No language requirements found.</p>{% endfor %}
+      </section>
+      <section class="card">
+        <h2>Experience and setup</h2>
+        <dl class="kv">
+          <dt>Median experience</dt>
+          <dd>{% if group.experience.median_years is not none %}{{ '%g' % group.experience.median_years }} year{{ '' if group.experience.median_years == 1 else 's' }} <span class="muted">(stated in {{ group.experience.stated_in }} postings)</span>{% else %}Rarely stated{% endif %}</dd>
+          <dt>Years asked</dt>
+          <dd>{% for k, v in group.experience.buckets.items() %}{{ k }}: {{ v }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+          <dt>Education</dt>
+          <dd>{% for k, v in group.education.items() %}{{ k | replace('_', ' ') }}: {{ v }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+          <dt>Work model</dt>
+          <dd>{% for k, v in group.remote.items() %}{{ k | replace('_', ' ') }}: {{ v }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+        </dl>
+      </section>
+    </div>
+  </div>
+  {% endif %}
+{% else %}
+  {% if not overview %}
+    <div class="card card-soft empty"><h2>No analysed jobs yet</h2><p>Collect jobs, then run the AI analysis to see which skills each role asks for.</p></div>
+  {% else %}
+  <div class="grid grid-3">
+    {% for cat, rows in overview %}
+    <section class="card group-card">
+      <div class="group-head">
+        <h3>{{ CATEGORIES.get(cat, cat) }}</h3>
+        <a href="/insights?category={{ cat }}&job_type={{ sel.job_type }}">All levels</a>
+      </div>
+      {% for r in rows %}
+        <div class="seniority-row">
+          <div class="head"><a href="/insights?category={{ cat }}&seniority={{ r.seniority }}&job_type={{ sel.job_type }}">{{ SENIORITIES.get(r.seniority, r.seniority) }}</a><span class="muted">{{ r.job_count }} job{{ 's' if r.job_count != 1 }}</span></div>
+          <div class="chips">
+            {% for s in r.skills %}<span class="chip {{ 'req' if s.required_pct >= 50 }}" title="{{ s.count }} postings; required in {{ s.required_pct }}%">{{ s.skill }}<span class="pct">{{ s.pct }}%</span></span>{% endfor %}
+            {% for l in r.languages[:2] %}<span class="chip" title="Language requirement">{{ l.language }}<span class="pct">{{ l.pct }}%</span></span>{% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+  <p class="footnote">The percentage is the share of analysed postings in that group that mention the skill. Skills with a blue outline are required in most of those postings.</p>
+  {% endif %}
+{% endif %}
+{% endblock %}

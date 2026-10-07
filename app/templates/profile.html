@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}My profile · JobFinder{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>My profile</h1>
+    <p class="lead">Used to match you with jobs and to build your learning plan. It's stored only on this computer.</p>
+  </div>
+  <a class="btn btn-secondary" href="/plan">Open learning plan</a>
+</div>
+
+<section class="card card-soft">
+  <h2>Import from your CV</h2>
+  <div class="dropzone">
+    <label class="visually-hidden" for="cv-file">CV file</label>
+    <input type="file" id="cv-file" accept=".pdf,.docx,.txt,.md">
+    <button type="button" class="btn-primary" id="cv-import" {{ 'disabled' if not has_ai_key }}>Read CV and fill in profile</button>
+    <p id="cv-status" class="hint" role="status" aria-live="polite" style="margin:0; flex-basis:100%">
+      {% if cv_filename %}Last CV: {{ cv_filename }}.{% endif %}
+      {% if not has_ai_key %}Reading a CV needs your {{ ai_provider }} API key (<a href="/settings">Settings</a>). You can also fill everything in by hand below.{% else %}A text-based PDF, Word or text file. The CV text is sent to {{ ai_provider }} once to pull out your details. Nothing you've already entered is overwritten.{% endif %}
+    </p>
+  </div>
+</section>
+
+<div id="profile-root" class="stack" style="margin-top:24px"></div>
+
+<div class="savebar">
+  <button type="button" class="btn-primary" id="profile-save">Save profile</button>
+  <span id="save-status" class="small muted" role="status" aria-live="polite">All changes saved.</span>
+  <a href="/plan" class="small push">Create my learning plan</a>
+</div>
+
+<script type="application/json" id="profile-data">{{ profile | tojson }}</script>
+<script type="application/json" id="profile-options">{{ {
+  "categories": CATEGORIES, "seniorities": SENIORITIES, "job_types": JOB_TYPES,
+  "skill_levels": skill_levels, "language_levels": language_levels
+} | tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="/static/profile.js?v={{ version }}"></script>{% endblock %}

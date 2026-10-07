@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Learning plan · JobFinder{% endblock %}
+{% macro prio(p) -%}
+  {%- if p == 'high' -%}<span class="prio prio-high">High priority</span>
+  {%- elif p == 'medium' -%}<span class="prio prio-medium">Medium priority</span>
+  {%- else -%}<span class="prio prio-low">Low priority</span>{%- endif -%}
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Learning plan</h1>
+    <p class="lead">What to learn, in which order and where, based on your profile and what open jobs in Austria actually ask for.</p>
+  </div>
+  {% if plans|length > 1 %}
+  <label class="field"><span>Earlier plans</span>
+    <select data-navigate="/plan?id=">
+      {% for p in plans %}<option value="{{ p.id }}" {{ 'selected' if plan and plan.id == p.id }}>{{ p.created_at[:16]|replace('T',' ') }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
+</div>
+
+{% if has_profile and has_ai_key %}
+<details class="card card-soft" id="plan-create" style="margin-bottom:24px" {{ 'open' if not plan }}>
+  <summary>{{ 'Create a new plan' if plan else 'Create my plan' }}</summary>
+  <div style="margin-top:16px">
+    {% include "_planning_picker.html" %}
+    <div class="form-inline">
+      <button type="button" class="btn-primary" id="plan-generate">{{ 'Create new plan' if plan else 'Create my plan' }}</button>
+      <span class="hint">Sends your profile and the market statistics (not your CV file) to the chosen provider. Smarter models take 1–4 minutes.</span>
+    </div>
+  </div>
+</details>
+{% endif %}
+<div id="plan-status" class="alert alert-info" role="status" aria-live="polite" hidden></div>
+
+{% if not has_profile %}
+  <div class="card card-soft empty">
+    <h2>Start with your profile</h2>
+    <p>Add your skills, experience and languages, or import your CV, so the plan can build on what you already know.</p>
+    <a class="btn btn-primary" href="/profile">Fill in my profile</a>
+  </div>
+{% else %}
+  {% if not has_ai_key %}<div class="alert alert-warn">Creating a plan needs your {{ ai_provider }} API key. Add it in <a href="/settings">Settings</a>.</div>{% endif %}
+  {% if counts.analysed < 20 %}<div class="alert alert-warn">Only {{ counts.analysed }} jobs are analysed so far, and the plan is grounded in that data. Collect and analyse more jobs first for a reliable picture.</div>{% endif %}
+  {% if not profile.target_categories %}<div class="alert alert-info">Pick your target roles and level in <a href="/profile">your profile</a>. Without them, the plan uses the most common roles in your data.</div>{% endif %}
+{% endif %}
+
+{% if plan %}
+{% set P = plan.plan %}
+<section class="card">
+  <div class="plan-facts">
+    <div class="fact"><b>{{ P.match_score if P.match_score is not none else '–' }}{{ '%' if P.match_score is not none }}</b><span>match with your target jobs' top skills</span></div>
+    <div class="fact"><b>{{ P.counts.high }}</b><span>high-priority items</span></div>
+    <div class="fact"><b>~{{ P.total_hours }} h</b><span>estimated study time</span></div>
+    <div class="fact"><b>~{{ P.total_weeks }} weeks</b><span>at {{ P.weekly_hours or profile.weekly_hours }} hours a week</span></div>
+    <div class="fact"><b id="progress-num">{{ P.progress_pct }}%</b><span>done</span></div>
+  </div>
+  <div class="progress" role="progressbar" aria-label="Plan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ P.progress_pct }}"><div id="progress-bar" style="width: {{ P.progress_pct }}%"></div></div>
+  <p style="margin-top:16px; max-width:80ch">{{ P.summary }}</p>
+  {% if P.strengths %}
+  <h3 style="margin-top:24px">Your strengths</h3>
+  <ul class="strengths">{% for s in P.strengths %}<li>{{ s }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="meta-note">Based on {{ P.market.total_jobs }} analysed open postings:
+    {% for g in P.market.groups %}{{ CATEGORIES.get(g.category, g.category) }} ({{ SENIORITIES.get(g.seniority, 'all levels') if g.seniority else 'all levels' }}, {{ g.job_count }}){{ ', ' if not loop.last }}{% endfor %}.
+    Created {{ plan.created_at[:10] }} with {{ plan.model }}{% if P.generated_with and P.generated_with.effort %} (effort: {{ P.generated_with.effort }}){% endif %}.</p>
+</section>
+
+<section class="card">
+  <h2>Priorities at a glance</h2>
+  <div class="glance">
+    {% for pr in ['high', 'medium', 'low'] %}
+    <div>
+      {{ prio(pr) }}
+      <ol>{% for it in P['items'] if it.priority == pr %}<li><a href="#{{ it.id }}">{{ it.topic }}</a></li>{% else %}<li class="muted" style="list-style:none; margin-left:-22px">None</li>{% endfor %}</ol>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if P.certifications %}
+<section class="card">
+  <h2>Certifications that make you stand out</h2>
+  <p class="card-note">Picked for your target roles from a checked list of current certifications{% if P.total_market_postings_with_certs %}. “Named in” counts target postings that mention the certificate{% endif %}. Exam fees are the issuer's list price in USD.</p>
+  <div class="grid grid-2" style="gap:12px">
+    {% for c in P.certifications %}
+    <div class="cert">
+      <div class="item-head">
+        <a class="item-title" href="{{ c.url | safe_url }}" target="_blank" rel="noopener noreferrer">{{ c.name }} ↗</a>
+        {{ prio(c.priority) }}
+      </div>
+      <div class="item-meta">
+        <span>{{ c.issuer }}</span><span>{{ c.level | capitalize }}</span>
+        <span>{% if c.cost %}${{ ('%d' % c.cost) if c.cost == c.cost|int else ('%.2f' % c.cost) }} exam{% else %}Fee: see issuer{% endif %}</span>
+        <span>~{{ c.prep_hours }} h prep</span>
+        <span>Phase {{ c.phase }}</span>
+        {% if c.mentions %}<span class="match-pill" title="Target postings naming this certificate">Named in {{ c.mentions }} posting{{ 's' if c.mentions != 1 }}</span>{% endif %}
+      </div>
+      <p class="small" style="margin:4px 0">{{ c.why }}</p>
+      {% if c.prereq %}<p class="small muted" style="margin:4px 0">Prerequisite: {{ c.prereq }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if P.recommended_roadmaps %}
+<section class="card">
+  <h2>Roadmaps and curricula for you</h2>
+  <p class="card-note">Complete roadmaps, curricula and challenges from several providers. Your plan below is the prioritised path; use these for depth.</p>
+  <div class="grid grid-2" style="gap:0 32px">
+    {% for r in P.recommended_roadmaps %}
+    <div class="roadmap-link">
+      <a href="{{ r.url | safe_url }}" target="_blank" rel="noopener noreferrer">{{ r.title }} ↗</a>
+      <span class="small muted">{{ r.provider }}, {{ r.kind | replace('_', ' ') }}{{ ', free' if r.free }}</span>
+      <p>{{ r.how_to_use or r.note }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% if P.other_roadmaps %}
+  <details style="margin-top:16px"><summary>More roadmaps for your target roles ({{ P.other_roadmaps|length }})</summary>
+    <ul class="small" style="margin-top:12px">{% for r in P.other_roadmaps %}<li style="margin-bottom:6px"><a href="{{ r.url | safe_url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a> <span class="muted">from {{ r.provider }}: {{ r.note }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+{% elif P.role_roadmaps %}
+<section class="card">
+  <h2>Reference roadmaps</h2>
+  <div class="chips">{% for r in P.role_roadmaps %}<a class="chip" href="{{ r.url | safe_url }}" target="_blank" rel="noopener noreferrer">roadmap.sh: {{ r.title }} ↗</a>{% endfor %}</div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="section-head">
+    <h2>Your roadmap</h2>
+    <div class="checks" id="prio-filter" role="group" aria-label="Show items">
+      <label class="pill"><input type="checkbox" value="high" checked>High</label>
+      <label class="pill"><input type="checkbox" value="medium" checked>Medium</label>
+      <label class="pill"><input type="checkbox" value="low" checked>Low</label>
+      <label class="check small" style="margin-left:8px"><input type="checkbox" id="hide-done"> Hide done</label>
+    </div>
+  </div>
+  {% for ph in P.phases %}
+  <div class="phase">
+    <div class="phase-num" aria-hidden="true">{{ ph.index }}</div>
+    <div>
+      <div class="phase-head">
+        <h3><span class="visually-hidden">Phase {{ ph.index }}: </span>{{ ph.title }}</h3>
+        <span class="when">{{ ph.start }} to {{ ph.end }}, ~{{ ph.weeks }} week{{ 's' if ph.weeks != 1 }} ({{ ph.hours }} h)</span>
+      </div>
+      {% if ph.goal %}<p class="phase-goal">Goal: {{ ph.goal }}</p>{% endif %}
+      {% if ph.certifications %}<p class="phase-goal">Exam in this phase: {{ ph.certifications | join(', ') }}</p>{% endif %}
+      {% for it in P['items'] if it.phase == ph.index %}
+      <article class="item {{ 'done' if it.status == 'done' }}" id="{{ it.id }}" data-priority="{{ it.priority }}" data-status="{{ it.status }}">
+        <div class="item-head">
+          <span class="item-title">{{ it.topic }}</span>
+          <div class="form-inline" style="gap:8px">
+            {{ prio(it.priority) }}
+            <select data-item="{{ it.id }}" data-plan="{{ plan.id }}" aria-label="Status of {{ it.topic }}">
+              <option value="todo" {{ 'selected' if it.status == 'todo' }}>To do</option>
+              <option value="doing" {{ 'selected' if it.status == 'doing' }}>In progress</option>
+              <option value="done" {{ 'selected' if it.status == 'done' }}>Done</option>
+            </select>
+          </div>
+        </div>
+        <div class="item-meta">
+          <span>~{{ it.estimated_hours }} h</span>
+          <span>{{ it.kind | humanize }}</span>
+          {% if it.market and it.market.pct is not none %}
+          <span class="evidence"><span class="mini" aria-hidden="true"><b style="width: {{ it.market.pct | bar }}"></b></span>In {{ it.market.pct }}% of target postings{% if it.market.required_pct is defined %}, required in {{ it.market.required_pct }}% of those{% endif %}{% if it.market.typical_level %}, usually {{ it.market.typical_level }}{% endif %}</span>
+          {% endif %}
+        </div>
+        {% if it.current_level or it.target_level %}<p><strong>Level now:</strong> {{ it.current_level or 'None' }}{% if it.target_level %}. <strong>Target:</strong> {{ it.target_level }}{% endif %}</p>{% endif %}
+        {% if it.priority_reason %}<p><strong>Why:</strong> {{ it.priority_reason }}</p>{% endif %}
+        {% if it.how %}<p><strong>How:</strong> {{ it.how }}</p>{% endif %}
+        {% if it.practice_project %}<p><strong>Prove it:</strong> {{ it.practice_project }}</p>{% endif %}
+        {% if it.resources or it.roadmap %}
+        <ul class="res">
+          {% if it.roadmap %}<li><a href="{{ it.roadmap.url | safe_url }}" target="_blank" rel="noopener noreferrer">{{ it.roadmap.title }}</a> <span class="muted">(roadmap)</span></li>{% endif %}
+          {% for r in it.resources %}
+            <li><a href="{{ r.url | safe_url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+              <span class="muted">({{ r.type }}{{ ', free' if r.free }}{{ '' if r.verified else ', search link' }})</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+{% if P.job_search_tips %}
+<section class="card">
+  <h2>Job search tips</h2>
+  <ul>{% for t in P.job_search_tips %}<li style="margin-bottom:6px">{{ t }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% elif preview and preview.market.total_jobs %}
+{% set G = preview.gaps %}
+<section class="card">
+  <h2>Quick check before the AI plan</h2>
+  <p class="card-note">Compared with {{ preview.market.total_jobs }} analysed postings for your targets. Create the plan to get an ordered roadmap with resources.</p>
+  <div class="plan-facts" style="max-width:320px">
+    <div class="fact"><b>{{ G.match_score if G.match_score is not none else '–' }}%</b><span>match with the top skills</span></div>
+  </div>
+  <div class="grid grid-2">
+    <div>
+      <h3>Biggest gaps</h3>
+      {% for g in G.top_gaps[:10] %}<div class="form-inline" style="gap:8px; margin-bottom:8px">{{ prio(g.suggested_priority) }} <strong>{{ g.skill }}</strong> <span class="small muted">in {{ g.pct }}% of postings</span></div>{% endfor %}
+      {% for l in G.languages if l.suggested_priority %}<div class="form-inline" style="gap:8px; margin-bottom:8px">{{ prio(l.suggested_priority) }} <strong>{{ l.language }} {{ l.typical_level }}</strong> <span class="small muted">in {{ l.pct }}% of postings; you: {{ l.have_level or 'none' }}</span></div>{% endfor %}
+    </div>
+    <div>
+      <h3>Already strong</h3>
+      <div class="chips">{% for s in G.strengths %}<span class="chip req">{{ s }}</span>{% else %}<span class="muted small">None of the top skills yet.</span>{% endfor %}</div>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/plan.js?v={{ version }}"></script>{% endblock %}

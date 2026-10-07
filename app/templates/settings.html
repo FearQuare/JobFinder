@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Settings · JobFinder{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="lead">Keys are stored in {{ storage }} on this computer and only sent to the service they belong to.</p>
+  </div>
+</div>
+{% if saved %}<div class="alert alert-success" role="status">{{ {'keys': 'Keys saved.', 'options': 'Settings saved.', 'linkedin': 'LinkedIn disconnected and its session deleted.'}.get(saved, 'Saved.') }}</div>{% endif %}
+
+<div class="grid grid-2" style="align-items:start">
+  <div class="stack">
+    <form class="card" method="post" action="/settings/keys" autocomplete="off">
+      {# Pressing Enter in a field submits the form with this (invisible) button instead of the first "Remove" button. #}
+      <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px">Save</button>
+      <h2>API keys</h2>
+      <p class="card-note">AI skill extraction needs <strong>one</strong> of the first two keys. Choose which one is used under “AI for job analysis”.</p>
+
+      {% macro key_field(name, label, placeholder, help, kind='password', in_use=false) -%}
+      <div class="form-row">
+        <label for="{{ name }}">{{ label }} {% if in_use %}<span class="tag tag-accent">In use</span>{% endif %}</label>
+        <input type="{{ kind }}" id="{{ name }}" name="{{ name }}" placeholder="{{ keys[name] or placeholder }}">
+        {% if keys[name] %}
+          <div class="key-saved">Saved ({{ keys[name] }}). Leave empty to keep it. <button class="btn-small btn-danger" name="clear" value="{{ name }}">Remove</button></div>
+        {% elif help %}<div class="hint">{{ help }}</div>{% endif %}
+      </div>
+      {%- endmacro %}
+      {{ key_field('anthropic_api_key', 'Anthropic API key', 'sk-ant-…', 'Create one at console.anthropic.com, under API keys.', in_use=settings.ai_provider == 'anthropic') }}
+      {{ key_field('openai_api_key', 'OpenAI API key', 'sk-…', 'Create one at platform.openai.com, under API keys (billing must be set up).', in_use=settings.ai_provider == 'openai') }}
+      {{ key_field('adzuna_app_id', 'Adzuna App ID (optional extra site)', 'e.g. 1a2b3c4d', '', kind='text') }}
+      {{ key_field('adzuna_app_key', 'Adzuna App Key', '', 'Free at developer.adzuna.com: register to get an App ID and Key.') }}
+      <div class="form-actions"><button type="submit" class="btn-primary">Save keys</button></div>
+    </form>
+
+    <section class="card">
+      <h2>LinkedIn account</h2>
+      <p class="card-note">Public LinkedIn job search works without an account. Connecting your account loads search results the way you see them when signed in, with more results per search.</p>
+      <p class="small">A browser window opens and <strong>you</strong> sign in there. The app never sees or stores your password. It keeps that browser session in the app's data folder and reuses it when collecting.</p>
+      <div class="alert alert-warn">LinkedIn's User Agreement forbids automated access, and accounts that trip its detection can be restricted. The app goes slowly to make this unlikely, but the risk is on your account. Public mode doesn't use your account at all.</div>
+      {% if playwright_missing %}<div class="alert alert-error">{{ playwright_missing }} Run <code>./run.sh</code> again to install it.</div>{% endif %}
+      {% if linkedin.connected %}
+        <p><span class="tag tag-success">Connected</span>{% if linkedin.connected_at %} <span class="small muted">since {{ linkedin.connected_at[:10] }}</span>{% endif %}</p>
+        <form method="post" action="/api/linkedin/disconnect" class="form-inline">
+          <button type="button" class="btn-secondary" id="linkedin-connect">Sign in again</button>
+          <button type="submit" class="btn-danger" data-confirm="Disconnect LinkedIn and delete the saved browser session?">Disconnect and delete session</button>
+        </form>
+      {% else %}
+        {% if linkedin.note %}<div class="alert alert-error">{{ linkedin.note }}</div>{% endif %}
+        <button type="button" class="btn-primary" id="linkedin-connect" {{ 'disabled' if playwright_missing }}>Connect LinkedIn</button>
+      {% endif %}
+      <div id="linkedin-login-state" class="alert alert-info" role="status" style="margin:16px 0 0" hidden></div>
+    </section>
+  </div>
+
+  <form class="card" method="post" action="/settings/options">
+    <div class="form-section">
+      <h2>Collection</h2>
+      <div class="form-row">
+        <label for="linkedin_mode">LinkedIn mode</label>
+        <select id="linkedin_mode" name="linkedin_mode">
+          <option value="public" {{ 'selected' if settings.linkedin_mode == 'public' }}>Public job search (no account)</option>
+          <option value="logged_in" {{ 'selected' if settings.linkedin_mode == 'logged_in' }} {{ 'disabled' if not linkedin.connected }}>Signed in with my account{{ ' (connect it first)' if not linkedin.connected }}</option>
+        </select>
+        <label class="check small"><input type="checkbox" name="linkedin_show_browser" value="1" {{ 'checked' if settings.linkedin_show_browser == '1' }}> Show the browser window while collecting in signed-in mode</label>
+      </div>
+      <div class="form-row">
+        <label for="linkedin_posted_within_days">LinkedIn: only jobs posted in the last N days</label>
+        <input type="number" id="linkedin_posted_within_days" name="linkedin_posted_within_days" value="{{ settings.linkedin_posted_within_days }}" min="0" max="90">
+        <span class="hint">0 means any date.</span>
+      </div>
+      <div class="grid fields-3">
+        <div class="form-row"><label for="karriere_max_pages">karriere.at pages per keyword</label><input type="number" id="karriere_max_pages" name="karriere_max_pages" value="{{ settings.karriere_max_pages }}" min="1" max="100"><span class="hint">About 15 jobs per page</span></div>
+        <div class="form-row"><label for="linkedin_max_pages">LinkedIn pages per keyword</label><input type="number" id="linkedin_max_pages" name="linkedin_max_pages" value="{{ settings.linkedin_max_pages }}" min="1" max="40"><span class="hint">10 per page (public), 25 signed in</span></div>
+        <div class="form-row"><label for="adzuna_max_pages">Adzuna pages per keyword</label><input type="number" id="adzuna_max_pages" name="adzuna_max_pages" value="{{ settings.adzuna_max_pages }}" min="1" max="20"><span class="hint">50 jobs per page</span></div>
+      </div>
+      <div class="form-row">
+        <label for="active_window_days">Treat a job as closed if it hasn't been seen for N days</label>
+        <input type="number" id="active_window_days" name="active_window_days" value="{{ settings.active_window_days }}" min="1" max="90">
+        <span class="hint">Counted from your latest collection, so jobs don't disappear when you haven't collected for a while.</span>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2>AI for job analysis</h2>
+      <p class="card-note">This model reads every job posting, often hundreds per run, so a fast, low-cost model is the right choice.</p>
+      <div class="form-row">
+        <label for="ai_provider">Provider</label>
+        <select id="ai_provider" name="ai_provider">
+          {% for k, v in AI_PROVIDERS.items() %}<option value="{{ k }}" {{ 'selected' if settings.ai_provider == k }}>{{ v }}{{ '' if keys[k ~ '_api_key'] else ' (no key saved)' }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="grid grid-2" style="gap:12px">
+        <div class="form-row">
+          <label for="ai_model">Anthropic model</label>
+          <input type="text" id="ai_model" name="ai_model" value="{{ settings.ai_model }}">
+          <span class="hint">Default: Claude Haiku 4.5, fast and low-cost at about $2–4 per 1,000 jobs. Sonnet is more precise at several times the cost.</span>
+        </div>
+        <div class="form-row">
+          <label for="openai_model">OpenAI model</label>
+          <input type="text" id="openai_model" name="openai_model" value="{{ settings.openai_model }}">
+          <span class="hint">Default: gpt-6-luna, OpenAI's lowest-cost current model. Any model with structured outputs works.</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <label for="ai_concurrency">Parallel requests</label>
+        <input type="number" id="ai_concurrency" name="ai_concurrency" value="{{ settings.ai_concurrency }}" min="1" max="10" style="max-width:140px">
+      </div>
+      <label class="check"><input type="checkbox" name="ai_auto_analyze" value="1" {{ 'checked' if settings.ai_auto_analyze == '1' }}> Analyse new jobs automatically after each collection</label>
+    </div>
+
+    <div class="form-section">
+      <h2>AI for profile analysis and learning plans</h2>
+      <p class="card-note">Reads your CV and writes your roadmap, one request each, so a smarter model gives noticeably better advice. Models without a saved key can't be picked.</p>
+      {% include "_planning_picker.html" %}
+      <div class="form-row" id="planning-custom" {{ 'hidden' if planning_current in (planning_options | map(attribute='id') | list) or not planning_current }}>
+        <label for="planning_custom_model">Other model</label>
+        <div class="form-inline">
+          <select name="planning_custom_provider" aria-label="Provider">{% for k, v in AI_PROVIDERS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+          <input type="text" id="planning_custom_model" name="planning_custom_model" placeholder="Exact model ID, e.g. claude-opus-5-5" style="flex:1">
+        </div>
+      </div>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn-primary">Save settings</button></div>
+  </form>
+</div>
+{% endblock %}

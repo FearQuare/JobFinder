@@ -1,0 +1,25 @@
+{# Model + thinking-effort picker for profile analysis / learning plans.
+   Expects: planning_options, planning_current, planning_effort (or settings.planning_effort), efforts, AI_PROVIDERS. #}
+{% set cur_effort = planning_effort if planning_effort is defined else settings.planning_effort %}
+<div class="picker">
+  <label class="field"><span>Model</span>
+    <select name="planning_model" id="planning-model">
+      {% for prov, label in AI_PROVIDERS.items() %}
+      <optgroup label="{{ label }}">
+        {% for o in planning_options if o.provider == prov %}
+        <option value="{{ o.id }}" {{ 'selected' if o.id == planning_current }} {{ 'disabled' if not o.available }}>
+          {{ o.label }}{{ ' ★' if o.recommended }} — {{ o.note }}{% if o.cost %}, {{ o.cost }}/plan{% endif %}{{ ', no key' if not o.available }}
+        </option>
+        {% endfor %}
+      </optgroup>
+      {% endfor %}
+      {% if settings is defined %}<option value="custom">Other model…</option>{% endif %}
+    </select>
+  </label>
+  <label class="field"><span>Thinking effort</span>
+    <select name="planning_effort" id="planning-effort">
+      {% for k, v in efforts.items() %}<option value="{{ k }}" {{ 'selected' if k == cur_effort }}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+</div>
+<p class="hint" style="margin:8px 0 16px">Costs are rough estimates for one plan (about 20k tokens in, 15k out including thinking) at list prices. Higher effort means more thinking: better reasoning, but slower.</p>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}JobFinder{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/fonts/montserrat-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/app.css?v={{ version }}">
+</head>
+<body>
+<a class="skip-link" href="#content">Skip to content</a>
+{% set nav_items = [('jobs', '/', 'Jobs'), ('insights', '/insights', 'Skill insights'), ('profile', '/profile', 'My profile'),
+                    ('plan', '/plan', 'Learning plan'), ('searches', '/searches', 'Searches'), ('settings', '/settings', 'Settings')] %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/" aria-label="JobFinder home"><span class="brand-mark" aria-hidden="true"></span>JobFinder</a>
+    <button type="button" class="btn-icon nav-toggle" aria-controls="main-nav" aria-expanded="false" aria-label="Menu">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <nav class="nav" id="main-nav" aria-label="Main">
+      {% for key, href, label in nav_items %}
+      <a href="{{ href }}" {% if active_page == key %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <div class="run-widget">
+      <span id="run-status" class="run-status" role="status" aria-live="polite"></span>
+      <button type="button" id="run-cancel" class="btn-small" hidden>Stop</button>
+      <button type="button" class="btn-primary" data-run="collect" title="Run all enabled searches on all their sites">Collect jobs</button>
+    </div>
+  </div>
+</header>
+<main id="content" tabindex="-1">
+  <div id="flash" class="alert alert-error" role="alert" hidden></div>
+  <div id="run-refresh" class="alert alert-success" role="status" hidden>The run finished. <a href="">Reload the page</a> to see the new data.</div>
+  {% block content %}{% endblock %}
+</main>
+<script src="/static/app.js?v={{ version }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

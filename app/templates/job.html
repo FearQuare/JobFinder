@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} · JobFinder{% endblock %}
+{% block content %}
+<a class="back-link" href="/" data-back>Back to jobs</a>
+<div class="page-head job-head">
+  <div>
+    <h1>{{ job.title }}</h1>
+    <div class="sub">{{ job.company or 'Unknown company' }}{% if job.location %}, {{ job.location }}{% endif %}</div>
+    <div class="tags">
+      {% if job.category %}<span class="tag tag-accent">{{ CATEGORIES.get(job.category, job.category) }}</span>{% endif %}
+      {% if job.seniority %}<span class="tag">{{ SENIORITIES.get(job.seniority, job.seniority) }}</span>{% endif %}
+      {% if job.job_type %}<span class="tag">{{ JOB_TYPES.get(job.job_type, job.job_type) }}</span>{% endif %}
+      {% if job.closed %}<span class="tag tag-closed">No longer accepting applications</span>{% endif %}
+    </div>
+  </div>
+  <div class="form-inline">
+    {% for l in listings %}
+      <a class="btn {{ 'btn-primary' if loop.first else 'btn-secondary' }}" href="{{ l.url | safe_url }}" target="_blank" rel="noopener noreferrer">Open on {{ SOURCES.get(l.source, l.source) }} ↗</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="split">
+  <article class="card">
+    <h2>Description</h2>
+    {% if job.description %}
+      <div class="description">{{ job.description }}</div>
+    {% else %}
+      <p class="muted">No description was stored for this job. Open it on the job site to read it.</p>
+    {% endif %}
+  </article>
+
+  <aside class="stack">
+    <section class="card">
+      <h2>What they ask for</h2>
+      {% if job.ai_status == 'done' and ai_data %}
+        {% if ai_data.summary %}<p>{{ ai_data.summary }}</p>{% endif %}
+        {% set req = skills | selectattr('required') | list %}
+        {% set opt = skills | rejectattr('required') | list %}
+        {% if req %}
+          <h3>Required</h3>
+          <div class="chips" style="margin-bottom:16px">{% for s in req %}<a class="chip req" href="/?skill={{ s.skill|urlencode }}" title="Show jobs asking for {{ s.skill }}">{{ s.skill }}</a>{% endfor %}</div>
+        {% endif %}
+        {% if opt %}
+          <h3>Nice to have</h3>
+          <div class="chips" style="margin-bottom:16px">{% for s in opt %}<a class="chip" href="/?skill={{ s.skill|urlencode }}" title="Show jobs asking for {{ s.skill }}">{{ s.skill }}</a>{% endfor %}</div>
+        {% endif %}
+        <dl class="kv">
+          <dt>Languages</dt>
+          <dd>{% for l in languages %}{{ l.language }}{% if l.level and l.level != 'unspecified' %} ({{ l.level }}){% endif %}{% if not l.required %}, optional{% endif %}{{ '; ' if not loop.last }}{% else %}Not stated{% endfor %}</dd>
+          <dt>Experience</dt>
+          <dd>{% if ai_data.years_experience_min is not none %}{{ ai_data.years_experience_min }}+ years{% else %}Not stated{% endif %}</dd>
+          <dt>Education</dt><dd>{{ ai_data.education | humanize }}</dd>
+          <dt>Work model</dt><dd>{{ ai_data.remote_policy | humanize }}</dd>
+        </dl>
+        <p class="meta-note">Analysed by {{ job.ai_model }} on {{ (job.ai_analyzed_at or '')[:10] }}</p>
+      {% elif job.ai_status == 'error' %}
+        <div class="alert alert-error">The AI couldn't analyse this job: {{ job.ai_error }}</div>
+      {% else %}
+        <p class="muted">Not analysed yet. Skills show up here after the next AI analysis, which needs an Anthropic or OpenAI key in <a href="/settings">Settings</a>.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Details</h2>
+      <dl class="kv">
+        <dt>Posted</dt><dd>{{ job.posted_at or 'Unknown' }}</dd>
+        <dt>First found</dt><dd>{{ job.first_seen_at[:10] }}</dd>
+        <dt>Last seen</dt><dd>{{ job.last_seen_at[:10] }}</dd>
+        {% if job.employment_raw %}<dt>Employment</dt><dd>{{ job.employment_raw }}</dd>{% endif %}
+        {% if job.salary_text %}<dt>Salary</dt><dd>{{ job.salary_text }}</dd>{% endif %}
+        <dt>Found by</dt><dd>{% for s in searches %}{{ s.name }}{{ ', ' if not loop.last }}{% else %}None{% endfor %}</dd>
+      </dl>
+    </section>
+  </aside>
+</div>
+{% endblock %}

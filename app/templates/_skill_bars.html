@@ -1,0 +1,17 @@
+{# expects: skills (list of {skill, count, pct, required_pct}), link_params (dict for /?...) #}
+<div class="legend" aria-hidden="true"><span><i class="seg-req"></i>Required</span><span><i class="seg-opt"></i>Nice to have</span><span>Bar length is the share of postings that mention the skill</span></div>
+<div class="bars">
+  {% for s in skills %}
+    {% set req = (s.pct * s.required_pct / 100) | round(1) %}
+    {% set opt = (s.pct - req) | round(1) %}
+    <div class="bar-label"><a href="/?{{ link_params | urlencode }}&skill={{ s.skill | urlencode }}" title="Show these jobs">{{ s.skill }}</a></div>
+    <div class="bar-track" role="img" aria-label="{{ s.skill }}: in {{ s.pct }}% of postings, required in {{ s.required_pct }}% of them">
+      <div class="bar" style="width: {{ s.pct | bar }}">
+        {% if req > 0 %}<div class="seg seg-req" style="flex: {{ req }}"></div>{% endif %}
+        {% if opt > 0 %}<div class="seg seg-opt" style="flex: {{ opt }}"></div>{% endif %}
+      </div>
+      <div class="tip" aria-hidden="true">{{ s.count }} postings ({{ s.pct }}%), required in {{ s.required_pct }}% of them</div>
+    </div>
+    <div class="bar-value">{{ s.pct }}%</div>
+  {% endfor %}
+</div>

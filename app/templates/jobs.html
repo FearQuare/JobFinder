@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Jobs · JobFinder{% endblock %}
+{% block content %}
+<section class="strip" aria-labelledby="jobs-heading">
+  <div>
+    <h1 id="jobs-heading">Software jobs in Austria</h1>
+    {% if counts.total %}
+    <p><strong>{{ counts.open | num }}</strong> open now, <strong>{{ counts.analysed | num }}</strong> read by AI{% if counts.pending %}, {{ counts.pending | num }} still waiting{% endif %}.
+      Collected from karriere.at, LinkedIn and Adzuna. A job posted on several sites is listed once.</p>
+    {% else %}
+    <p>Collect jobs from karriere.at, LinkedIn and Adzuna to see what's open and which skills employers ask for.</p>
+    {% endif %}
+  </div>
+  {% if counts.pending and has_ai_key %}
+  <div class="actions"><button type="button" class="btn-secondary" data-run="analyze">Analyse {{ counts.pending | num }} waiting job{{ 's' if counts.pending != 1 }}</button></div>
+  {% elif counts.total == 0 %}
+  <div class="actions"><button type="button" class="btn-light" data-run="collect">Collect jobs</button></div>
+  {% endif %}
+</section>
+
+{% include "_run_panel.html" %}
+
+{% if counts.total == 0 %}
+<div class="card card-soft empty">
+  <h2>No jobs yet</h2>
+  <p>Collecting runs the searches on the <a href="/searches">Searches</a> page. To get skill reports, first add an Anthropic or OpenAI API key in <a href="/settings">Settings</a>. Adzuna keys are optional.</p>
+  <button type="button" class="btn-primary" data-run="collect">Collect jobs</button>
+</div>
+{% else %}
+
+<form method="get" action="/" data-autosubmit role="search" aria-label="Filter jobs">
+  <div class="toolbar">
+    <label class="search-pill">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8"/><path d="M12.2 12.2L16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="visually-hidden">Search</span>
+      <input type="search" name="q" value="{{ f.q }}" placeholder="Search title, company or description">
+    </label>
+    <button type="submit" class="btn-primary">Search</button>
+  </div>
+  <div class="filters">
+    {% macro filter(name, label, options, current) -%}
+      <select name="{{ name }}" aria-label="{{ label }}" class="{{ 'is-set' if current }}">
+        {%- for value, text in options %}<option value="{{ value }}" {{ 'selected' if current == value|string }}>{{ text }}</option>{% endfor -%}
+      </select>
+    {%- endmacro %}
+    <select name="search_id" aria-label="Search" class="{{ 'is-set' if f.search_id }}">
+      <option value="">All searches</option>
+      {% for s in searches %}<option value="{{ s.id }}" {{ 'selected' if f.search_id == s.id|string }}>{{ s.name }}</option>{% endfor %}
+    </select>
+    {{ filter('category', 'Role type', [('', 'All role types')] + CATEGORIES.items()|list, f.category) }}
+    {{ filter('seniority', 'Level', [('', 'Any level')] + SENIORITIES.items()|list, f.seniority) }}
+    {{ filter('job_type', 'Contract', [('', 'Any contract')] + JOB_TYPES.items()|list, f.job_type) }}
+    {{ filter('source', 'Site', [('', 'All sites')] + SOURCES.items()|list, f.source) }}
+    <select name="posted_days" aria-label="Posted" class="{{ 'is-set' if f.posted_days }}">
+      <option value="">Posted any time</option>
+      {% for d in [1, 3, 7, 14, 30] %}<option value="{{ d }}" {{ 'selected' if f.posted_days == d|string }}>Last {{ d }} day{{ 's' if d > 1 }}</option>{% endfor %}
+    </select>
+    <select name="status" aria-label="Status" class="{{ 'is-set' if f.status == 'all' }}">
+      <option value="open" {{ 'selected' if f.status == 'open' }}>Open now</option>
+      <option value="all" {{ 'selected' if f.status == 'all' }}>Include expired</option>
+    </select>
+    <select name="hide_other" aria-label="Role scope" class="{{ 'is-set' if not f.hide_other }}">
+      <option value="1" {{ 'selected' if f.hide_other }}>Software roles only</option>
+      <option value="0" {{ 'selected' if not f.hide_other }}>Include non-software</option>
+    </select>
+    {% if f.skill %}<input type="hidden" name="skill" value="{{ f.skill }}"><span class="tag tag-accent">Skill: {{ f.skill }}</span>{% endif %}
+    <a href="/" class="reset">Clear filters</a>
+  </div>
+
+  <div class="result-line">
+    <strong>{{ total | num }} job{{ 's' if total != 1 }}</strong>
+    <select name="sort" aria-label="Sort">
+      <option value="posted" {{ 'selected' if f.sort in ('', 'posted') }}>Newest posted</option>
+      <option value="found" {{ 'selected' if f.sort == 'found' }}>Newest found</option>
+      <option value="company" {{ 'selected' if f.sort == 'company' }}>Company A–Z</option>
+      {% if has_profile %}<option value="match" {{ 'selected' if f.sort == 'match' }}>Best match for me</option>{% endif %}
+    </select>
+  </div>
+</form>
+
+<ul class="job-list">
+  {% for j in jobs %}
+  <li class="job-row">
+    <div>
+      <a class="job-title" href="/jobs/{{ j.id }}">{{ j.title }}</a>
+      <div class="job-sub"><b>{{ j.company or 'Unknown company' }}</b>{% if j.location %}, {{ j.location }}{% endif %}{% if j.salary_text %}<span class="muted"> — {{ j.salary_text }}</span>{% endif %}</div>
+      <div class="tags">
+        {% if j.category %}<span class="tag tag-accent">{{ CATEGORIES.get(j.category, j.category) }}</span>{% endif %}
+        {% if j.seniority and j.seniority != 'unspecified' %}<span class="tag">{{ SENIORITIES.get(j.seniority) }}</span>{% endif %}
+        {% if j.job_type and j.job_type != 'unspecified' %}<span class="tag">{{ JOB_TYPES.get(j.job_type) }}</span>{% endif %}
+        {% if j.closed %}<span class="tag tag-closed">Closed</span>{% endif %}
+        {% if j.class_source == 'rules' %}<span class="tag tag-quiet" title="Sorted by its title only until the AI reads the posting">Not analysed yet</span>{% endif %}
+      </div>
+    </div>
+    <div class="job-side">
+      {% if has_profile %}
+        {% if j.match %}
+          <span class="match-pill {{ 'high' if j.match.score >= 75 }}" title="{% if j.match.missing %}Missing required: {{ j.match.missing|join(', ') }}{% else %}You have all required skills{% endif %}">{{ j.match.score }}% match</span>
+          {% if j.match.language_gap %}<span class="needs" title="Required language level you don't have yet">needs {{ j.match.language_gap }}</span>{% endif %}
+        {% endif %}
+      {% endif %}
+      <span class="date">{{ j.posted_at or j.first_seen_at[:10] }}</span>
+      <span class="sources">
+        {% for l in j.listings %}<a class="src-link" href="{{ l.url | safe_url }}" target="_blank" rel="noopener noreferrer">{{ SOURCES.get(l.source, l.source) }} ↗</a>{% endfor %}
+      </span>
+    </div>
+  </li>
+  {% else %}
+  <li class="empty-row">No jobs match these filters. <a href="/">Clear filters</a></li>
+  {% endfor %}
+</ul>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a class="btn btn-small" href="{{ page_url(page - 1) }}" rel="prev">Previous</a>{% endif %}
+  <span class="small muted">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-small" href="{{ page_url(page + 1) }}" rel="next">Next</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endblock %}

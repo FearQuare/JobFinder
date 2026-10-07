@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Searches · JobFinder{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Searches</h1>
+    <p class="lead">Each search runs its keywords on the sites you pick, for jobs in Austria. A job found by several keywords or sites is stored once.</p>
+  </div>
+</div>
+{% include "_run_panel.html" %}
+
+<div class="grid search-grid">
+{% for s in searches %}
+  <form class="card search-card" method="post" action="/searches/{{ s.id }}">
+    <div class="section-head">
+      <h2>{{ s.name }}</h2>
+      <a class="count" href="/?search_id={{ s.id }}">{{ s.job_count }} job{{ 's' if s.job_count != 1 }}</a>
+    </div>
+    <div class="form-row">
+      <label for="name-{{ s.id }}">Name</label>
+      <input type="text" id="name-{{ s.id }}" name="name" value="{{ s.name }}" required>
+    </div>
+    <div class="form-row">
+      <label for="kw-{{ s.id }}">Keywords <span class="hint">one per line</span></label>
+      <textarea id="kw-{{ s.id }}" name="keywords" rows="{{ [s.keywords|length, 3]|max }}" required>{{ s.keywords | join('\n') }}</textarea>
+    </div>
+    <fieldset class="form-row" style="border:0; padding:0; margin:0 0 20px">
+      <legend class="visually-hidden">Sites</legend>
+      <div class="checks">
+        {% for k, v in SOURCES.items() %}<label class="pill"><input type="checkbox" name="sources" value="{{ k }}" {{ 'checked' if k in s.sources }}>{{ v }}</label>{% endfor %}
+      </div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="enabled" value="1" {{ 'checked' if s.enabled }}> Include in “Collect jobs”</label>
+    <div class="form-actions">
+      <button type="submit" class="btn-secondary">Save</button>
+      <button type="button" class="btn-primary" data-run="collect" data-search-id="{{ s.id }}">Collect this search</button>
+      <button type="submit" class="btn-small btn-danger push" formaction="/searches/{{ s.id }}/delete" formnovalidate
+              data-confirm="Delete the search “{{ s.name }}”? Jobs it found stay in the database.">Delete</button>
+    </div>
+  </form>
+{% endfor %}
+
+  <form class="card card-soft search-card" method="post" action="/searches">
+    <h2>New search</h2>
+    <div class="form-row">
+      <label for="name-new">Name</label>
+      <input type="text" id="name-new" name="name" placeholder="Junior DevOps in Vienna" required>
+    </div>
+    <div class="form-row">
+      <label for="kw-new">Keywords <span class="hint">one per line</span></label>
+      <textarea id="kw-new" name="keywords" rows="3" placeholder="DevOps Junior&#10;Cloud Engineer" required></textarea>
+    </div>
+    <fieldset class="form-row" style="border:0; padding:0; margin:0 0 20px">
+      <legend class="visually-hidden">Sites</legend>
+      <div class="checks">
+        {% for k, v in SOURCES.items() %}<label class="pill"><input type="checkbox" name="sources" value="{{ k }}" checked>{{ v }}</label>{% endfor %}
+      </div>
+    </fieldset>
+    <button type="submit" class="btn-primary">Add search</button>
+  </form>
+</div>
+
+{% if runs %}
+<section class="card section">
+  <h2>Recent runs</h2>
+  <table class="runs">
+    <thead><tr><th scope="col">Started (UTC)</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Result</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+      {% set st = (r.stats | fromjson) if r.stats else {} %}
+      <tr>
+        <td class="nowrap num">{{ r.started_at[:16] | replace('T', ' ') }}</td>
+        <td>{{ 'Collection' if r.kind == 'collect' else 'AI analysis' }}</td>
+        <td><span class="status status-{{ r.status }}">{{ {'done': 'Finished', 'failed': 'Failed', 'cancelled': 'Stopped', 'running': 'Running'}.get(r.status, r.status) }}</span></td>
+        <td>{% if st %}{{ st.seen or 0 }} seen, {{ st.new_jobs or 0 }} new, {{ st.analysed or 0 }} analysed{% if st.errors %}, {{ st.errors }} warning{{ 's' if st.errors != 1 }}{% endif %}{% endif %}
+          {% if r.log %}<details style="margin-top:6px"><summary class="small">Log</summary><div class="log" tabindex="0">{{ r.log }}</div></details>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Page not found' if status == 404 else 'Something went wrong' }} · JobFinder{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="code">{{ status }}</div>
+  <h1>{{ 'This page doesn’t exist' if status == 404 else 'That didn’t work' }}</h1>
+  <p class="muted" style="margin-top:12px">{{ detail if detail and detail != 'Not Found' else 'The link may be old, or the job was removed when the database was reset.' }}</p>
+  <div class="form-actions" style="justify-content:center">
+    <a class="btn btn-primary" href="/">Go to jobs</a>
+    <button type="button" class="btn-secondary" data-back>Go back</button>
+  </div>
+</div>
+{% endblock %}
